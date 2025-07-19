@@ -14,9 +14,6 @@ public class ProductResponse {
     private String title;
     private String description;
     private String slug;
-    private BigDecimal price;
-    private BigDecimal salePrice;
-    private boolean active;
     private List<Long> categoryIds;
     private List<String> imageFileNames;
     private List<ProductVariantDto> variants;
@@ -27,14 +24,12 @@ public class ProductResponse {
         dto.setTitle(product.getTitle());
         dto.setDescription(product.getDescription());
         dto.setSlug(product.getSlug());
-        dto.setPrice(product.getPrice());
-        dto.setSalePrice(product.getSalePrice());
-        dto.setActive(product.isActive());
         dto.setImageFileNames(product.getImageFileNames());
         dto.setVariants(product.getVariants().stream().map(ProductVariantDto::fromEntity).toList());
         dto.setCategoryIds(
                 product.getCategories().stream()
                         .map(Category::getId)
+
                         .toList()
         );
         return dto;
@@ -47,6 +42,7 @@ public class ProductResponse {
         private BigDecimal salePrice;
         private boolean active;
         private String imageFileName;
+        private boolean defaultVariant;
 
         public static ProductVariantDto fromEntity(ProductVariant variant) {
             ProductVariantDto dto = new ProductVariantDto();
@@ -55,8 +51,8 @@ public class ProductResponse {
             dto.setSalePrice(variant.getSalePrice());
             dto.setActive(variant.isActive());
             dto.setImageFileName(variant.getImageFileName());
+            dto.setDefaultVariant(variant.isDefaultVariant()); // отговаря на новото поле в модела
             return dto;
         }
     }
 }
-

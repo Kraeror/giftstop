@@ -24,10 +24,6 @@ public class Product {
     @Column(length = 7000)
     private String description;
 
-    private BigDecimal price;
-
-    private BigDecimal salePrice;
-
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Image> images = new ArrayList<>();
 
@@ -41,8 +37,6 @@ public class Product {
             inverseJoinColumns = @JoinColumn(name = "category_id")
     )
     private List<Category> categories = new ArrayList<>();
-
-    private boolean active;
 
     // SEO полета
     private String metaTitle;

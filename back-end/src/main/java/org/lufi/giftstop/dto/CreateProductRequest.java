@@ -10,18 +10,11 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 public class CreateProductRequest {
-
     private String title;
     private String description;
     private String slug;
-    private BigDecimal price;
-    private BigDecimal salePrice;
-    private boolean active;
-
     private List<Long> categoryIds;
-
     private List<String> imageFileNames;
-
     private List<ProductVariantDto> variants;
 
     @Data
@@ -34,5 +27,18 @@ public class CreateProductRequest {
         private BigDecimal salePrice;
         private boolean active;
         private String imageFileName;
+        private boolean defaultVariant;
+        private List<ProductVariantFieldDto> customFields;
+
+        @Data
+        @NoArgsConstructor
+        @AllArgsConstructor
+        @Builder
+        public static class ProductVariantFieldDto {
+            private String name;
+            private String type;
+            private String itemsJson;
+        }
     }
 }
+
