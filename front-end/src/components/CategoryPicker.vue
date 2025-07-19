@@ -109,7 +109,7 @@ const goBackTo = (index) => {
 const addCategory = (cat) => {
   if (!selectedCategoryObjects.value.some(c => c.id === cat.id)) {
     selectedCategoryObjects.value.push(cat);
-    emit('select', cat.id);
+    emit('select', cat);
   }
   isOpen.value = false;
 }
