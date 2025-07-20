@@ -34,6 +34,9 @@ public class ProductVariantFieldServiceImpl implements ProductVariantFieldServic
             result.add(field);
         }
 
+        List<ProductVariantField> saved = fieldRepository.saveAll(result);
+        variant.setCustomFields(saved);
+
         return fieldRepository.saveAll(result);
     }
 }

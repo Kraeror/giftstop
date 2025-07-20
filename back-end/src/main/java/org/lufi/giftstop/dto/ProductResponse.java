@@ -4,6 +4,7 @@ import lombok.Data;
 import org.lufi.giftstop.model.Product;
 import org.lufi.giftstop.model.ProductVariant;
 import org.lufi.giftstop.model.Category;
+import org.lufi.giftstop.model.ProductVariantField;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -43,6 +44,7 @@ public class ProductResponse {
         private boolean active;
         private String imageFileName;
         private boolean defaultVariant;
+        private List<CustomFieldDto> customFields;
 
         public static ProductVariantDto fromEntity(ProductVariant variant) {
             ProductVariantDto dto = new ProductVariantDto();
@@ -52,6 +54,25 @@ public class ProductResponse {
             dto.setActive(variant.isActive());
             dto.setImageFileName(variant.getImageFileName());
             dto.setDefaultVariant(variant.isDefaultVariant()); // отговаря на новото поле в модела
+            dto.setCustomFields(
+                    variant.getCustomFields().stream()
+                            .map(CustomFieldDto::fromEntity)
+                            .toList()
+            );
+            return dto;
+        }
+    }
+    @Data
+    public static class CustomFieldDto {
+        private String type;
+        private String name;
+        private String items;
+
+        public static CustomFieldDto fromEntity(ProductVariantField field) {
+            CustomFieldDto dto = new CustomFieldDto();
+            dto.setType(field.getType());
+            dto.setName(field.getName());
+            dto.setItems(field.getItemsJson());
             return dto;
         }
     }

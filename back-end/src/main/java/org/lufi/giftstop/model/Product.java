@@ -3,7 +3,9 @@ package org.lufi.giftstop.model;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.math.BigDecimal;
@@ -46,6 +48,10 @@ public class Product {
 
     @Column(unique = true)
     private String slug;
+
+    @Column(updatable = false)
+    @CreationTimestamp
+    private LocalDateTime createdAt;
 
     public List<String> getImageFileNames() {
         if (images == null) return List.of();

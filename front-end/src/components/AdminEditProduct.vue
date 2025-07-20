@@ -84,7 +84,13 @@
 
           <div v-if="!variant.defaultVariant">
             <label class="block text-sm font-medium text-gray-700 mb-1">Снимка на варианта</label>
-            <input type="file" accept="image/*" :ref="'variantImageInput_' + index" @change="handleVariantImageUpload($event, index)" class="hidden" />
+            <input
+              type="file"
+              accept="image/*"
+              :ref="el => variantImageInputs[index] = el"
+              @change="handleVariantImageUpload($event, index)"
+              class="hidden"
+            />
             <button @click.prevent="openVariantImageInput(index)" type="button"
               class="inline-flex items-center gap-2 px-4 py-2 bg-[#F777AC] text-white text-sm font-semibold rounded hover:bg-pink-600">
               📷 Качи снимка
@@ -157,6 +163,8 @@ import CategoryPicker from '@/components/CategoryPicker.vue';
 const route = useRoute();
 const router = useRouter();
 
+const variantImageInputs = ref([]);
+
 const additionalFieldTypes = [
   'Текст (свободен)',
   'Числово поле',
@@ -184,7 +192,7 @@ onMounted(async () => {
     const p = res.data;
     product.value = {
       ...p,
-      categoryIds: p.categoryIds,
+      categoryIds: p.categoryIds.map(cat => typeof cat === 'object' ? cat.id : cat),
       images: p.imageFileNames.map(name => ({ preview: `http://192.168.0.68:8080/uploads/products/${p.id}/${name}` })),
       variants: p.variants.map(v => ({
         ...v,
@@ -264,7 +272,7 @@ const removeVariantImage = (index) => {
 };
 
 const openVariantImageInput = (index) => {
-  const input = document.querySelector(`input[ref='variantImageInput_${index}']`);
+  const input = variantImageInputs.value[index];
   if (input) input.click();
 };
 
@@ -318,7 +326,12 @@ const submitProduct = async () => {
       description: product.value.description,
       slug: product.value.slug,
       categoryIds: product.value.categoryIds,
-      imageFileNames: [],
+      imageFileNames: product.value.images
+      .filter(img => !img.file && img.preview) // само старите
+      .map(img => {
+        const segments = img.preview.split('/');
+        return segments[segments.length - 1];
+      }),
       variants: product.value.variants.map(v => ({
         title: v.title,
         price: v.price,

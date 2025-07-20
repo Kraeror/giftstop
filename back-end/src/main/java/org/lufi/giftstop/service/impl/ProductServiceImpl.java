@@ -2,6 +2,9 @@ package org.lufi.giftstop.service.impl;
 
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.lufi.giftstop.dto.CreateProductRequest;
 import org.lufi.giftstop.dto.ProductListDto;
 import org.lufi.giftstop.dto.ProductResponse;
@@ -18,10 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 
@@ -38,7 +40,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional
-    public Product createProduct(CreateProductRequest request, List<MultipartFile> productImages, List<MultipartFile> variantParts, List<MultipartFile> variantImages) throws IOException {
+    public Product createProduct(CreateProductRequest request, List<MultipartFile> productImages, List<MultipartFile> variantParts, List<MultipartFile> variantImages) throws IOException, JSONException {
         List<Category> categories = categoryRepository.findAllById(request.getCategoryIds());
 
         Product product = Product.builder()
@@ -54,32 +56,44 @@ public class ProductServiceImpl implements ProductService {
         if (variantParts != null) {
             for (int i = 0; i < variantParts.size(); i++) {
                 MultipartFile variantPart = variantParts.get(i);
-
-                String json = new String(variantPart.getBytes());
-
-                // Ръчно парсване от JSON (само с прости операции)
-                // Тук приемаме, че всеки ред е валиден JSON
-                // Реално – frontend вече е пратил всички полета в request.getVariants()
-                CreateProductRequest.ProductVariantDto dto = variantDtos.get(i);
+                String json = new String(variantPart.getBytes(), StandardCharsets.UTF_8);
+                JSONObject jsonObj = new JSONObject(json);
 
                 ProductVariant variant = ProductVariant.builder()
-                        .name(dto.getTitle())
-                        .price(dto.getPrice())
-                        .salePrice(dto.getSalePrice())
-                        .active(dto.isActive())
-                        .imageFileName(dto.getImageFileName())
-                        .defaultVariant(dto.isDefaultVariant())
+                        .name(jsonObj.optString("title", ""))
+                        .price(new BigDecimal(jsonObj.opt("price").toString()))
+                        .salePrice(new BigDecimal(jsonObj.opt("salePrice").toString()))
+                        .active(jsonObj.optBoolean("active", true))
+                        .defaultVariant(jsonObj.optBoolean("defaultVariant", false))
                         .product(product)
                         .build();
 
                 variants.add(variant);
+
+                JSONArray customFieldsJson = jsonObj.optJSONArray("customFields");
+                List<CreateProductRequest.ProductVariantDto.ProductVariantFieldDto> fieldDtos = new ArrayList<>();
+
+                if (customFieldsJson != null) {
+                    for (int j = 0; j < customFieldsJson.length(); j++) {
+                        JSONObject fieldJson = customFieldsJson.getJSONObject(j);
+                        CreateProductRequest.ProductVariantDto.ProductVariantFieldDto fieldDto =
+                                new CreateProductRequest.ProductVariantDto.ProductVariantFieldDto();
+
+                        fieldDto.setName(fieldJson.optString("name"));
+                        fieldDto.setType(fieldJson.optString("type"));
+                        fieldDto.setItemsJson(fieldJson.optString("itemsJson"));
+
+                        fieldDtos.add(fieldDto);
+                    }
+
+                    productVariantFieldService.createFieldsForVariant(variant, fieldDtos);
+                }
             }
         }
 
         product.setVariants(variants);
         Product savedProduct = productRepository.save(product);
 
-        // Обработка на customFields
         for (int i = 0; i < variants.size(); i++) {
             CreateProductRequest.ProductVariantDto dto = variantDtos.get(i);
             ProductVariant variant = savedProduct.getVariants().get(i);
@@ -92,7 +106,6 @@ public class ProductServiceImpl implements ProductService {
 
         return savedProduct;
     }
-
 
     private void assignImages(Product product, List<MultipartFile> productImages, List<MultipartFile> variantImages) {
         if (product.getImages() == null) {
@@ -111,21 +124,22 @@ public class ProductServiceImpl implements ProductService {
         }
 
         if (variantImages != null) {
-            List<ProductVariant> variants = product.getVariants();
+            List<ProductVariant> variants = product.getVariants().stream()
+                    .filter(v -> !v.isDefaultVariant())
+                    .toList();
+
             for (int i = 0; i < variantImages.size() && i < variants.size(); i++) {
                 MultipartFile file = variantImages.get(i);
                 ProductVariant variant = variants.get(i);
-                if (!variant.isDefaultVariant()) {
-                    String fileName = fileStorageService.storeProductFile(product.getId(), file);
-                    variant.setImageFileName(fileName);
-                }
+                String fileName = fileStorageService.storeProductFile(product.getId(), file);
+                variant.setImageFileName(fileName);
             }
         }
     }
 
     @Override
     public List<ProductListDto> getAllForAdmin() {
-        return productRepository.findAll().stream().map(product -> {
+        return productRepository.findAllByOrderByCreatedAtDesc().stream().map(product -> {
             ProductVariant defaultVariant = product.getVariants().stream()
                     .filter(ProductVariant::isDefaultVariant)
                     .findFirst()
@@ -189,7 +203,6 @@ public class ProductServiceImpl implements ProductService {
         productRepository.deleteById(id);
     }
 
-
     @Override
     @Transactional
     public void updateProduct(Long id,
@@ -208,52 +221,46 @@ public class ProductServiceImpl implements ProductService {
         product.setSlug(request.getSlug());
         product.setCategories(categories);
 
-        // Изтриване на старите изображения и варианти
-        if (product.getImages() != null) {
-            product.getImages().clear();
-        } else {
+        if (product.getImages() == null) {
             product.setImages(new ArrayList<>());
+        } else {
+            product.getImages().clear();
         }
 
-        variantRepository.deleteAllByProduct(product);
+        if (request.getImageFileNames() != null) {
+            for (String fileName : request.getImageFileNames()) {
+                product.getImages().add(Image.builder()
+                        .fileName(fileName)
+                        .product(product)
+                        .build());
+            }
+        }
 
-        // Създаване на нови варианти
+        product.getVariants().clear();
+
         List<CreateProductRequest.ProductVariantDto> variantDtos = request.getVariants();
-        List<ProductVariant> variants = new ArrayList<>();
 
-        if (variantParts != null) {
-            for (int i = 0; i < variantParts.size(); i++) {
-                MultipartFile variantPart = variantParts.get(i);
-                String json = new String(variantPart.getBytes());
-                CreateProductRequest.ProductVariantDto dto = variantDtos.get(i);
-
+        if (variantDtos != null) {
+            for (CreateProductRequest.ProductVariantDto dto : variantDtos) {
                 ProductVariant variant = ProductVariant.builder()
                         .name(dto.getTitle())
                         .price(dto.getPrice())
                         .salePrice(dto.getSalePrice())
                         .active(dto.isActive())
-                        .imageFileName(dto.getImageFileName())
                         .defaultVariant(dto.isDefaultVariant())
                         .product(product)
                         .build();
 
-                variants.add(variant);
+                product.getVariants().add(variant);
+
+                if (dto.getCustomFields() != null) {
+                    productVariantFieldService.createFieldsForVariant(variant, dto.getCustomFields());
+                }
             }
         }
 
-        product.setVariants(variants);
         Product savedProduct = productRepository.save(product);
 
-        // Обработка на custom полета
-        for (int i = 0; i < variants.size(); i++) {
-            CreateProductRequest.ProductVariantDto dto = variantDtos.get(i);
-            ProductVariant variant = savedProduct.getVariants().get(i);
-            if (dto.getCustomFields() != null) {
-                productVariantFieldService.createFieldsForVariant(variant, dto.getCustomFields());
-            }
-        }
-
-        // Запис на изображения през FileStorageService
         assignImages(savedProduct, productImages, variantImages);
     }
 }

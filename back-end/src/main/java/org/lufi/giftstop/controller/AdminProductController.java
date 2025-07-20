@@ -49,7 +49,7 @@ public class AdminProductController {
         return ResponseEntity.ok(products);
     }
 
-    @PutMapping("/api/admin/products/{id}")
+    @PutMapping("{id}")
     public ResponseEntity<?> updateProduct(
             @PathVariable Long id,
             @RequestPart("product") @Valid CreateProductRequest productDto,
@@ -63,7 +63,8 @@ public class AdminProductController {
         } catch (EntityNotFoundException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Продуктът не е намерен.");
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Грешка при обновяване на продукта.");
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Грешка: " + e.getClass().getSimpleName() + " - " + e.getMessage());
         }
     }
 

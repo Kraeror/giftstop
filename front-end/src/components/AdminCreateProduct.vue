@@ -46,7 +46,13 @@
           class="space-y-4 border p-4 rounded shadow-md bg-gray-50">
             <div v-if="!variant.defaultVariant">
                 <label class="block text-sm font-medium text-gray-700 mb-1">Снимка на варианта</label>
-                <input type="file" accept="image/*" :ref="'variantImageInput_' + index" @change="handleVariantImageUpload($event, index)" class="hidden" />
+                <input
+                    type="file"
+                    accept="image/*"
+                    :ref="el => variantImageInputs[index] = el"
+                    @change="handleVariantImageUpload($event, index)"
+                    class="hidden"
+                />
                 <button @click.prevent="openVariantImageInput(index)" type="button"
                     class="inline-flex items-center gap-2 px-4 py-2 bg-[#F777AC] text-white text-sm font-semibold rounded hover:bg-pink-600">
                     📷 Качи снимка
@@ -234,6 +240,7 @@ export default {
     },
     data() {
         return {
+            variantImageInputs: {},
             additionalFieldTypes: [
                 'Текст (свободен)',
                 'Числово поле',
@@ -344,80 +351,97 @@ export default {
             }
         },
         async submitProduct() {
-        try {
-            // Валидация: поне един вариант и един трябва да е default
-            if (!this.product.variants.length) {
-                alert("Моля, добавете поне един вариант.");
-                return;
-            }
-
-            if (!this.product.variants.some(v => v.defaultVariant)) {
-                alert("Моля, маркирайте един от вариантите като основен (default).");
-                return;
-            }
-
-            const formData = new FormData();
-
-            // Продуктът (без изображенията) се изпраща като JSON blob
-            const productData = {
-                title: this.product.title,
-                description: this.product.description,
-                slug: this.product.slug,
-                categoryIds: this.product.categoryIds,
-                imageFileNames: [], // ще се попълни на бекенда
-                variants: this.product.variants.map(variant => ({
-                    title: variant.title,
-                    price: variant.price,
-                    salePrice: variant.salePrice,
-                    active: variant.active,
-                    imageFileName: '', // ще се попълни на бекенда
-                    defaultVariant: variant.defaultVariant
-                })),
-            };
-
-            formData.append('product', new Blob([JSON.stringify(productData)], { type: 'application/json' }));
-
-            // Основни изображения
-            for (const image of this.product.images) {
-                if (image.file) {
-                    formData.append('images', image.file);
+            try {
+                // Валидация
+                if (!this.product.variants.length) {
+                    alert("Моля, добавете поне един вариант.");
+                    return;
                 }
-            }
 
-            // Варианти (всеки поотделно + евентуално изображение)
-            this.product.variants.forEach(variant => {
-                const variantData = {
-                    title: variant.title,
-                    price: variant.price,
-                    salePrice: variant.salePrice,
-                    active: variant.active,
-                    imageFileName: '',
-                    defaultVariant: variant.defaultVariant,
-                    customFields: variant.customFields || []
+                if (!this.product.variants.some(v => v.defaultVariant)) {
+                    alert("Моля, маркирайте един от вариантите като основен (default).");
+                    return;
+                }
+
+                const formData = new FormData();
+
+                // Продукт (основни данни без снимки)
+                const productData = {
+                    title: this.product.title,
+                    description: this.product.description,
+                    slug: this.product.slug,
+                    categoryIds: this.product.categoryIds,
+                    imageFileNames: [],
+                    variants: this.product.variants.map(variant => ({
+                        title: variant.title,
+                        price: variant.price,
+                        salePrice: variant.salePrice,
+                        active: variant.active,
+                        imageFileName: '',
+                        defaultVariant: variant.defaultVariant,
+                        customFields: (variant.customFields || []).map(field => ({
+                            name: field.name,
+                            type: field.type,
+                            itemsJson: JSON.stringify(
+                                field.type === 'Цвят'
+                                    ? field.items.map(i => `${i.name}:${i.value}`)
+                                    : field.items || []
+                            )
+                        }))
+                    })),
                 };
 
-                formData.append('variants', new Blob([JSON.stringify(variantData)], { type: 'application/json' }));
+                formData.append('product', new Blob([JSON.stringify(productData)], { type: 'application/json' }));
 
-                if (variant.imageFile && !variant.defaultVariant) {
-                    formData.append('variantImages', variant.imageFile);
-                }
-
-                // снимки за custom полета от типа „Снимка“
-                for (const field of variant.customFields) {
-                    if (field.type === 'Снимка' && field.file) {
-                        formData.append('customFieldImages', field.file);
+                // Основни изображения
+                for (const image of this.product.images) {
+                    if (image.file) {
+                        formData.append('images', image.file);
                     }
                 }
-            });
 
-            const response = await axios.post('/api/admin/products', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data'
-                },
-            });
+                // Варианти + custom полета и техните снимки
+                this.product.variants.forEach((variant) => {
+                    const variantData = {
+                        title: variant.title,
+                        price: variant.price,
+                        salePrice: variant.salePrice,
+                        active: variant.active,
+                        imageFileName: '',
+                        defaultVariant: variant.defaultVariant,
+                        customFields: (variant.customFields || []).map(field => ({
+                            name: field.name,
+                            type: field.type,
+                            itemsJson: JSON.stringify(
+                                field.type === 'Цвят'
+                                    ? field.items.map(i => `${i.name}:${i.value}`)
+                                    : field.items || []
+                            )
+                        }))
+                    };
 
-            console.log('Успешно:', response.data);
-            alert('Продуктът е създаден успешно!');
+                    formData.append('variants', new Blob([JSON.stringify(variantData)], { type: 'application/json' }));
+
+                    if (variant.imageFile && !variant.defaultVariant) {
+                        formData.append('variantImages', variant.imageFile);
+                    }
+
+                    // Снимки от custom полета тип "Снимка"
+                    for (const field of variant.customFields || []) {
+                        if (field.type === 'Снимка' && field.file) {
+                            formData.append('customFieldImages', field.file);
+                        }
+                    }
+                });
+
+                const response = await axios.post('/api/admin/products', formData, {
+                    headers: {
+                        'Content-Type': 'multipart/form-data'
+                    },
+                });
+
+                console.log('Успешно:', response.data);
+                alert('Продуктът е създаден успешно!');
             } catch (error) {
                 console.error('Грешка при запис:', error);
                 alert('Възникна грешка при запис на продукта.');
@@ -476,14 +500,19 @@ export default {
             this.product.variants[index].imagePreview = null;
         },
         openVariantImageInput(index) {
-            const input = this.$refs['variantImageInput_' + index];
-            if (input && input[0]) {
-                input[0].click();
+            const input = this.variantImageInputs[index];
+            if (input) {
+                input.click();
             }
         },
         onCategorySelected(category) {
-            this.selectedCategory = category;
-            this.product.categoryIds = [category.id];
+            if (!this.product.categoryIds.includes(category.id)) {
+                this.product.categoryIds.push(category.id);
+            }
+        },
+
+        onCategoryRemoved(category) {
+            this.product.categoryIds = this.product.categoryIds.filter(id => id !== category.id);
         },
     },
 };
